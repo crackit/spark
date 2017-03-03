@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.kubernetes
 
-import java.io.FileInputStream
+import java.io.{File, FileInputStream}
 import java.security.{KeyStore, SecureRandom}
 import javax.net.ssl.{SSLContext, TrustManagerFactory, X509TrustManager}
 
@@ -30,11 +30,20 @@ import scala.collection.mutable
 import org.apache.spark.{SecurityManager => SparkSecurityManager, SparkConf, SparkException, SSLOptions}
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
+import org.apache.spark.deploy.rest.kubernetes.{KubernetesFileUtils, PemsToKeyStoreConverter}
 import org.apache.spark.util.Utils
 
-private[spark] case class SslConfiguration(
-  sslOptions: SSLOptions,
+private case class SubmissionSSLOptions(
+  storeBasedSslOptions: SSLOptions,
   isKeyStoreLocalFile: Boolean,
+  keyPem: Option[File],
+  isKeyPemLocalFile: Boolean,
+  serverCertPem: Option[File],
+  isServerCertPemLocalFile: Boolean,
+  clientCertPem: Option[File])
+
+private[spark] case class SslConfiguration(
+  enabled: Boolean,
   sslPodEnvVars: Array[EnvVar],
   sslPodVolumes: Array[Volume],
   sslPodVolumeMounts: Array[VolumeMount],
@@ -52,30 +61,24 @@ private[spark] class SslConfigurationProvider(
   private val sslSecretsDirectory = s"$DRIVER_CONTAINER_SECRETS_BASE_DIR/$kubernetesAppId-ssl"
 
   def getSslConfiguration(): SslConfiguration = {
-    val (driverSubmitSslOptions, isKeyStoreLocalFile) = parseDriverSubmitSslOptions()
-    if (driverSubmitSslOptions.enabled) {
+    val driverSubmitSslOptions = parseDriverSubmitSslOptions()
+    if (driverSubmitSslOptions.storeBasedSslOptions.enabled) {
       val sslSecretsMap = mutable.HashMap[String, String]()
+      val storeBasedSslOptions = driverSubmitSslOptions.storeBasedSslOptions
       val sslEnvs = mutable.Buffer[EnvVar]()
       val secrets = mutable.Buffer[Secret]()
-      driverSubmitSslOptions.keyStore.foreach(store => {
-        val resolvedKeyStoreFile = if (isKeyStoreLocalFile) {
-          if (!store.isFile) {
-            throw new SparkException(s"KeyStore specified at $store is not a file or" +
-              s" does not exist.")
-          }
-          val keyStoreBytes = Files.toByteArray(store)
-          val keyStoreBase64 = BaseEncoding.base64().encode(keyStoreBytes)
-          sslSecretsMap += (SUBMISSION_SSL_KEYSTORE_SECRET_NAME -> keyStoreBase64)
-          s"$sslSecretsDirectory/$SUBMISSION_SSL_KEYSTORE_SECRET_NAME"
+      storeBasedSslOptions.keyStore.foreach(store => {
+        val onPodKeyStorePath = if (driverSubmitSslOptions.isKeyStoreLocalFile) {
+          extractFileContentsToSecret(sslSecretsMap, SUBMISSION_SSL_KEYSTORE_SECRET_NAME, store)
         } else {
           store.getAbsolutePath
         }
         sslEnvs += new EnvVarBuilder()
           .withName(ENV_SUBMISSION_KEYSTORE_FILE)
-          .withValue(resolvedKeyStoreFile)
+          .withValue(onPodKeyStorePath)
           .build()
       })
-      driverSubmitSslOptions.keyStorePassword.foreach(password => {
+      storeBasedSslOptions.keyStorePassword.foreach(password => {
         val passwordBase64 = BaseEncoding.base64().encode(password.getBytes(Charsets.UTF_8))
         sslSecretsMap += (SUBMISSION_SSL_KEYSTORE_PASSWORD_SECRET_NAME -> passwordBase64)
         sslEnvs += new EnvVarBuilder()
@@ -83,7 +86,7 @@ private[spark] class SslConfigurationProvider(
           .withValue(s"$sslSecretsDirectory/$SUBMISSION_SSL_KEYSTORE_PASSWORD_SECRET_NAME")
           .build()
       })
-      driverSubmitSslOptions.keyPassword.foreach(password => {
+      storeBasedSslOptions.keyPassword.foreach(password => {
         val passwordBase64 = BaseEncoding.base64().encode(password.getBytes(Charsets.UTF_8))
         sslSecretsMap += (SUBMISSION_SSL_KEY_PASSWORD_SECRET_NAME -> passwordBase64)
         sslEnvs += new EnvVarBuilder()
@@ -91,10 +94,38 @@ private[spark] class SslConfigurationProvider(
           .withValue(s"$sslSecretsDirectory/$SUBMISSION_SSL_KEY_PASSWORD_SECRET_NAME")
           .build()
       })
-      driverSubmitSslOptions.keyStoreType.foreach(storeType => {
+      storeBasedSslOptions.keyStoreType.foreach(storeType => {
         sslEnvs += new EnvVarBuilder()
           .withName(ENV_SUBMISSION_KEYSTORE_TYPE)
           .withValue(storeType)
+          .build()
+      })
+      driverSubmitSslOptions.keyPem.foreach(keyPem => {
+        val onPodKeyPem = if (driverSubmitSslOptions.isKeyPemLocalFile) {
+          extractFileContentsToSecret(
+            sslSecretsMap,
+            SUBMISSION_SSL_KEY_PEM_SECRET_NAME,
+            keyPem)
+        } else {
+          keyPem.getAbsolutePath
+        }
+        sslEnvs += new EnvVarBuilder()
+          .withName(ENV_SUBMISSION_KEY_PEM_FILE)
+          .withValue(onPodKeyPem)
+          .build()
+      })
+      driverSubmitSslOptions.serverCertPem.foreach(certPem => {
+        val onPodCertPem = if (driverSubmitSslOptions.isServerCertPemLocalFile) {
+          extractFileContentsToSecret(
+            sslSecretsMap,
+            SUBMISSION_SSL_CERT_PEM_SECRET_NAME,
+            certPem)
+        } else {
+          certPem.getAbsolutePath
+        }
+        sslEnvs += new EnvVarBuilder()
+          .withName(ENV_SUBMISSION_CERT_PEM_FILE)
+          .withValue(onPodCertPem)
           .build()
       })
       sslEnvs += new EnvVarBuilder()
@@ -124,8 +155,7 @@ private[spark] class SslConfigurationProvider(
       val (driverSubmitClientTrustManager, driverSubmitClientSslContext) =
         buildSslConnectionConfiguration(driverSubmitSslOptions)
       SslConfiguration(
-        driverSubmitSslOptions,
-        isKeyStoreLocalFile,
+        true,
         sslEnvs.toArray,
         Array(sslVolume),
         Array(sslVolumeMount),
@@ -134,8 +164,7 @@ private[spark] class SslConfigurationProvider(
         driverSubmitClientSslContext)
     } else {
       SslConfiguration(
-        driverSubmitSslOptions,
-        isKeyStoreLocalFile,
+        false,
         Array[EnvVar](),
         Array[Volume](),
         Array[VolumeMount](),
@@ -145,59 +174,140 @@ private[spark] class SslConfigurationProvider(
     }
   }
 
-  private def parseDriverSubmitSslOptions(): (SSLOptions, Boolean) = {
-    val maybeKeyStore = sparkConf.get(KUBERNETES_DRIVER_SUBMIT_KEYSTORE)
-    val resolvedSparkConf = sparkConf.clone()
-    val (isLocalKeyStore, resolvedKeyStore) = maybeKeyStore.map(keyStore => {
-      val keyStoreURI = Utils.resolveURI(keyStore)
-      val isProvidedKeyStoreLocal = keyStoreURI.getScheme match {
-        case "file" | null => true
-        case "local" => false
-        case _ => throw new SparkException(s"Invalid KeyStore URI $keyStore; keyStore URI" +
-          " for submit server must have scheme file:// or local:// (no scheme defaults" +
-          " to file://)")
-      }
-      (isProvidedKeyStoreLocal, Option.apply(keyStoreURI.getPath))
-    }).getOrElse((false, Option.empty[String]))
-    resolvedKeyStore.foreach {
-      resolvedSparkConf.set(KUBERNETES_DRIVER_SUBMIT_KEYSTORE, _)
+  private def extractFileContentsToSecret(
+      sslSecretsMap: mutable.HashMap[String, String],
+      secretName: String,
+      secretFile: File): String = {
+    if (!secretFile.isFile) {
+      throw new SparkException(s"KeyStore specified at $secretFile is not a file or" +
+        s" does not exist.")
     }
-    sparkConf.get(KUBERNETES_DRIVER_SUBMIT_TRUSTSTORE).foreach { trustStore =>
-      val trustStoreURI = Utils.resolveURI(trustStore)
-      trustStoreURI.getScheme match {
-        case "file" | null =>
-          resolvedSparkConf.set(KUBERNETES_DRIVER_SUBMIT_TRUSTSTORE, trustStoreURI.getPath)
-        case _ => throw new SparkException(s"Invalid trustStore URI $trustStore; trustStore URI" +
-          " for submit server must have no scheme, or scheme file://")
-      }
-    }
-    val securityManager = new SparkSecurityManager(resolvedSparkConf)
-    (securityManager.getSSLOptions(KUBERNETES_SUBMIT_SSL_NAMESPACE), isLocalKeyStore)
+    val keyStoreBytes = Files.toByteArray(secretFile)
+    val keyStoreBase64 = BaseEncoding.base64().encode(keyStoreBytes)
+    sslSecretsMap += (secretName -> keyStoreBase64)
+    s"$sslSecretsDirectory/$secretName"
   }
 
-  private def buildSslConnectionConfiguration(driverSubmitSslOptions: SSLOptions):
+  private def parseDriverSubmitSslOptions(): SubmissionSSLOptions = {
+    val maybeKeyStore = sparkConf.get(DRIVER_SUBMIT_SSL_KEYSTORE)
+    val maybeTrustStore = sparkConf.get(DRIVER_SUBMIT_SSL_TRUSTSTORE)
+    val maybeKeyPem = sparkConf.get(DRIVER_SUBMIT_SSL_KEY_PEM)
+    val maybeServerCertPem = sparkConf.get(DRIVER_SUBMIT_SSL_SERVER_CERT_PEM)
+    val maybeClientCertPem = sparkConf.get(DRIVER_SUBMIT_SSL_CLIENT_CERT_PEM)
+    validatePemsDoNotConflictWithStores(
+      maybeKeyStore,
+      maybeTrustStore,
+      maybeKeyPem,
+      maybeServerCertPem,
+      maybeClientCertPem)
+    val resolvedSparkConf = sparkConf.clone()
+    val (isLocalKeyStore, resolvedKeyStore) = resolveLocalFile(maybeKeyStore, "keyStore")
+    resolvedKeyStore.foreach {
+      resolvedSparkConf.set(DRIVER_SUBMIT_SSL_KEYSTORE, _)
+    }
+    val (isLocalServerCertPem, resolvedServerCertPem): (Boolean, Option[String]) =
+      resolveLocalFile(maybeServerCertPem, "server cert PEM")
+    val (isLocalKeyPem, resolvedKeyPem) = resolveLocalFile(maybeKeyPem, "key PEM")
+    maybeTrustStore.foreach { trustStore =>
+      require(KubernetesFileUtils.isUriLocalFile(trustStore), s"Invalid trustStore URI" +
+        s"$trustStore; trustStore URI for submit server must have no scheme, or scheme file://")
+      resolvedSparkConf.set(DRIVER_SUBMIT_SSL_TRUSTSTORE, Utils.resolveURI(trustStore).getPath)
+    }
+    val clientCertPem: Option[String] = maybeClientCertPem.map { clientCert =>
+      require(KubernetesFileUtils.isUriLocalFile(clientCert), "Invalid client certificate PEM URI" +
+        s" $clientCert: client certificate URI must have no scheme, or scheme file://")
+      Utils.resolveURI(clientCert).getPath
+    }
+    val securityManager = new SparkSecurityManager(resolvedSparkConf)
+    val storeBasedSslOptions = securityManager.getSSLOptions(DRIVER_SUBMIT_SSL_NAMESPACE)
+    SubmissionSSLOptions(
+      storeBasedSslOptions,
+      isLocalKeyStore,
+      resolvedKeyPem.map(new File(_)),
+      isLocalKeyPem,
+      resolvedServerCertPem.map(new File(_)),
+      isLocalServerCertPem,
+      clientCertPem.map(new File(_)))
+  }
+
+  private def resolveLocalFile(file: Option[String],
+      fileType: String): (Boolean, Option[String]) = {
+    file.map { f =>
+      require(isValidSslFileScheme(f), s"Invalid $fileType URI $f, $fileType URI" +
+        s" for submit server must have scheme file:// or local:// (no scheme defaults to file://")
+      val isLocal = KubernetesFileUtils.isUriLocalFile(f)
+      (isLocal, Option.apply(Utils.resolveURI(f).getPath))
+    }.getOrElse(false, None)
+  }
+
+  private def validatePemsDoNotConflictWithStores(
+      maybeKeyStore: Option[String],
+      maybeTrustStore: Option[String],
+      maybeKeyPem: Option[String],
+      maybeServerCertPem: Option[String],
+      maybeClientCertPem: Option[String]) = {
+    // Can only set either pems or keystore/truststore. Specifying one from one category and
+    // one from the other category is prohibited.
+    val maybeKeyOrServerCertPem = maybeKeyPem.orElse(maybeServerCertPem)
+    (maybeKeyStore, maybeKeyOrServerCertPem) match {
+      case (Some(_), Some(_)) =>
+        throw new SparkException("Cannot specify server PEM files and key store files; must" +
+          " specify only one or the other.")
+    }
+    (maybeKeyPem, maybeServerCertPem) match {
+      case (Some(_), None) =>
+        throw new SparkException("When specifying the key PEM file, the server certificate PEM" +
+          " file must also be provided.")
+      case (None, Some(_)) =>
+        throw new SparkException("When specifying the server certificate PEM file, the key PEM" +
+          " file must also be provided.")
+    }
+    (maybeTrustStore, maybeClientCertPem) match {
+      case (Some(_), Some(_)) =>
+        throw new SparkException("Cannot specify client certificate PEM file and trust store" +
+          " file; must specify only one or the other.")
+    }
+  }
+
+  private def isValidSslFileScheme(rawUri: String): Boolean = {
+    val resolvedScheme = Option.apply(Utils.resolveURI(rawUri)).getOrElse("file")
+    resolvedScheme == "file" || resolvedScheme == "local"
+  }
+
+  private def buildSslConnectionConfiguration(driverSubmitSslOptions: SubmissionSSLOptions):
       (Option[X509TrustManager], SSLContext) = {
-    driverSubmitSslOptions.trustStore.map(trustStoreFile => {
-      val trustManagerFactory = TrustManagerFactory.getInstance(
-        TrustManagerFactory.getDefaultAlgorithm)
-      val trustStore = KeyStore.getInstance(
-        driverSubmitSslOptions.trustStoreType.getOrElse(KeyStore.getDefaultType))
+    val maybeTrustStore = driverSubmitSslOptions.clientCertPem.map { certPem =>
+      PemsToKeyStoreConverter.convertCertPemToTrustStore(
+        certPem,
+        "certificate",
+        driverSubmitSslOptions.storeBasedSslOptions.trustStoreType)
+    }.orElse(driverSubmitSslOptions.storeBasedSslOptions.trustStore.map { trustStoreFile =>
       if (!trustStoreFile.isFile) {
         throw new SparkException(s"TrustStore file at ${trustStoreFile.getAbsolutePath}" +
           s" does not exist or is not a file.")
       }
+      val trustStore = KeyStore.getInstance(
+        driverSubmitSslOptions
+          .storeBasedSslOptions
+          .trustStoreType
+          .getOrElse(KeyStore.getDefaultType))
       Utils.tryWithResource(new FileInputStream(trustStoreFile)) { trustStoreStream =>
-        driverSubmitSslOptions.trustStorePassword match {
+        driverSubmitSslOptions.storeBasedSslOptions.trustStorePassword match {
           case Some(password) =>
             trustStore.load(trustStoreStream, password.toCharArray)
           case None => trustStore.load(trustStoreStream, null)
         }
       }
+      trustStore
+    })
+    maybeTrustStore.map { trustStore =>
+      val trustManagerFactory = TrustManagerFactory.getInstance(
+        TrustManagerFactory.getDefaultAlgorithm)
       trustManagerFactory.init(trustStore)
       val trustManagers = trustManagerFactory.getTrustManagers
       val sslContext = SSLContext.getInstance("TLSv1.2")
       sslContext.init(null, trustManagers, SECURE_RANDOM)
       (Option.apply(trustManagers(0).asInstanceOf[X509TrustManager]), sslContext)
-    }).getOrElse((Option.empty[X509TrustManager], SSLContext.getDefault))
+    }.getOrElse((Option.empty[X509TrustManager], SSLContext.getDefault))
   }
 }

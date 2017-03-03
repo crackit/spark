@@ -66,8 +66,6 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
   private val NAMESPACE = UUID.randomUUID().toString.replaceAll("-", "")
   private var minikubeKubernetesClient: KubernetesClient = _
   private var clientConfig: Config = _
-  private var keyStoreFile: File = _
-  private var trustStoreFile: File = _
 
   override def beforeAll(): Unit = {
     Minikube.startMinikube()
@@ -79,13 +77,6 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       .done()
     minikubeKubernetesClient = Minikube.getKubernetesClient.inNamespace(NAMESPACE)
     clientConfig = minikubeKubernetesClient.getConfiguration
-    val (keyStore, trustStore) = SSLUtils.generateKeyStoreTrustStorePair(
-      Minikube.getMinikubeIp,
-      "changeit",
-      "changeit",
-      "changeit")
-    keyStoreFile = keyStore
-    trustStoreFile = trustStore
   }
 
   before {
@@ -282,7 +273,12 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "Unexpected value for annotation2")
   }
 
-  test("Enable SSL on the driver submit server") {
+  test("Enable SSL on the driver submit server using stores") {
+    val (keyStore, trustStore) = SSLUtils.generateKeyStoreTrustStorePair(
+      Minikube.getMinikubeIp,
+      "changeit",
+      "changeit",
+      "changeit")
     val args = Array(
       "--master", s"k8s://https://${Minikube.getMinikubeIp}:8443",
       "--deploy-mode", "cluster",
@@ -300,11 +296,43 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
       "--conf", "spark.ssl.kubernetes.submit.enabled=true",
       "--conf", "spark.ssl.kubernetes.submit.keyStore=" +
-        s"file://${keyStoreFile.getAbsolutePath}",
+        s"file://${keyStore.getAbsolutePath}",
       "--conf", "spark.ssl.kubernetes.submit.keyStorePassword=changeit",
       "--conf", "spark.ssl.kubernetes.submit.keyPassword=changeit",
       "--conf", "spark.ssl.kubernetes.submit.trustStore=" +
-        s"file://${trustStoreFile.getAbsolutePath}",
+        s"file://${trustStore.getAbsolutePath}",
+      "--conf", s"spark.ssl.kubernetes.driverlaunch.trustStorePassword=changeit",
+      "--conf", "spark.kubernetes.submit.waitAppCompletion=false",
+      EXAMPLES_JAR_FILE.getAbsolutePath)
+    SparkSubmit.main(args)
+  }
+
+  test("Enable SSL on the driver submit server using PEM files") {
+    val (keyPem, certPem) = SSLUtils.generateKeyCertPemPair(Minikube.getMinikubeIp)
+    val args = Array(
+      "--master", s"k8s://https://${Minikube.getMinikubeIp}:8443",
+      "--deploy-mode", "cluster",
+      "--kubernetes-namespace", NAMESPACE,
+      "--name", "spark-pi",
+      "--executor-memory", "512m",
+      "--executor-cores", "1",
+      "--num-executors", "1",
+      "--jars", HELPER_JAR_FILE.getAbsolutePath,
+      "--class", SPARK_PI_MAIN_CLASS,
+      "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
+      "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
+      "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
+      "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
+      "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
+      "--conf", "spark.ssl.kubernetes.submit.enabled=true",
+      "--conf", s"${DRIVER_SUBMIT_SSL_KEY_PEM.key}=" +
+        s"file://${keyPem.getAbsolutePath}",
+      "--conf", "spark.ssl.kubernetes.submit.keyStorePassword=changeit",
+      "--conf", "spark.ssl.kubernetes.submit.keyPassword=changeit",
+      "--conf", s"${DRIVER_SUBMIT_SSL_SERVER_CERT_PEM.key}=" +
+        s"file://${certPem.getAbsolutePath}",
+      "--conf", s"${DRIVER_SUBMIT_SSL_CLIENT_CERT_PEM.key}=" +
+        s"file://${certPem.getAbsolutePath}",
       "--conf", s"spark.ssl.kubernetes.driverlaunch.trustStorePassword=changeit",
       "--conf", "spark.kubernetes.submit.waitAppCompletion=false",
       EXAMPLES_JAR_FILE.getAbsolutePath)

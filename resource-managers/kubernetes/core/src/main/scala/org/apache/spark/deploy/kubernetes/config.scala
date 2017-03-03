@@ -138,7 +138,7 @@ package object config {
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(60L)
 
-  private[spark] val KUBERNETES_DRIVER_SUBMIT_KEYSTORE =
+  private[spark] val DRIVER_SUBMIT_SSL_KEYSTORE =
     ConfigBuilder("spark.ssl.kubernetes.submit.keyStore")
       .doc("""
           | KeyStore file for the driver submission server listening
@@ -148,7 +148,7 @@ package object config {
       .stringConf
       .createOptional
 
-  private[spark] val KUBERNETES_DRIVER_SUBMIT_TRUSTSTORE =
+  private[spark] val DRIVER_SUBMIT_SSL_TRUSTSTORE =
     ConfigBuilder("spark.ssl.kubernetes.submit.trustStore")
       .doc("""
           | TrustStore containing certificates for communicating
@@ -166,6 +166,42 @@ package object config {
            """.stripMargin)
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val DRIVER_SUBMIT_SSL_KEY_PEM =
+    ConfigBuilder("spark.ssl.kubernetes.submit.keyPemFile")
+      .doc("""
+          | Key pem file that the driver submission server will
+          | use when setting up SSL connections. Can be pre-mounted
+          | on the driver pod's disk or uploaded from the submitting
+          | client's machine.
+        """.stripMargin)
+      .stringConf
+      .createOptional
+
+  private[spark] val DRIVER_SUBMIT_SSL_SERVER_CERT_PEM =
+    ConfigBuilder("spark.ssl.kubernetes.submit.serverCertPemFile")
+      .doc("""
+             | Certificate pem file that is associated with the key
+             | pem file the submission server uses to set up
+             | SSL connections. Can be pre-mounted
+             | on the driver pod's disk or uploaded from the submitting
+             | client's machine.
+           """.stripMargin)
+      .stringConf
+      .createOptional
+
+  private[spark] val DRIVER_SUBMIT_SSL_CLIENT_CERT_PEM =
+    ConfigBuilder("spark.ssl.kubernetes.submit.clientCertPemFile")
+      .doc("""
+             | Certificate pem file that the submission client uses
+             | to connect to the submission server over SSL. This
+             | should often be the same as the server certificate,
+             | but can be different if the submission client will
+             | contact the driver through a proxy instead of the
+             | driver service directly.
+           """.stripMargin)
+      .stringConf
+      .createOptional
 
   private[spark] val KUBERNETES_DRIVER_SERVICE_NAME =
     ConfigBuilder("spark.kubernetes.driver.service.name")

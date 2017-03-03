@@ -155,11 +155,6 @@ private[spark] class Client(
             .done()
           kubernetesResourceCleaner.registerOrUpdateResource(submitServerSecret)
           val sslConfiguration = sslConfigurationProvider.getSslConfiguration()
-          val driverKubernetesSelectors = (Map(
-            SPARK_DRIVER_LABEL -> kubernetesAppId,
-            SPARK_APP_ID_LABEL -> kubernetesAppId,
-            SPARK_APP_NAME_LABEL -> appName)
-            ++ parsedCustomLabels)
           val (driverPod, driverService) = launchDriverKubernetesComponents(
             kubernetesClient,
             driverServiceManager,
@@ -195,7 +190,6 @@ private[spark] class Client(
           Utils.tryLogNonFatalError {
             driverServiceManager.stop()
           }
-
           // Remove the shutdown hooks that would be redundant
           Utils.tryLogNonFatalError {
             ShutdownHookManager.removeShutdownHook(resourceCleanShutdownHook)
@@ -404,7 +398,7 @@ private[spark] class Client(
       sslConfiguration: SslConfiguration): Pod = {
     val containerPorts = buildContainerPorts()
     val probePingHttpGet = new HTTPGetActionBuilder()
-      .withScheme(if (sslConfiguration.sslOptions.enabled) "HTTPS" else "HTTP")
+      .withScheme(if (sslConfiguration.enabled) "HTTPS" else "HTTP")
       .withPath("/v1/submissions/ping")
       .withNewPort(SUBMISSION_SERVER_PORT_NAME)
       .build()

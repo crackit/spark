@@ -29,7 +29,7 @@ import org.apache.commons.codec.binary.Base64
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SecurityManager, SPARK_VERSION => sparkVersion, SparkConf, SSLOptions}
+import org.apache.spark.{SSLOptions, SecurityManager, SparkConf, SparkException, SPARK_VERSION => sparkVersion}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.rest._
 import org.apache.spark.util.{ShutdownHookManager, ThreadUtils, Utils}
@@ -42,7 +42,9 @@ private case class KubernetesSparkRestServerArguments(
     keyStoreFile: Option[String] = None,
     keyStorePasswordFile: Option[String] = None,
     keyStoreType: Option[String] = None,
-    keyPasswordFile: Option[String] = None) {
+    keyPasswordFile: Option[String] = None,
+    keyPemFile: Option[String] = None,
+    certPemFile: Option[String] = None) {
   def validate(): KubernetesSparkRestServerArguments = {
     require(host.isDefined, "Hostname not set via --hostname.")
     require(port.isDefined, "Port not set via --port")
@@ -81,6 +83,12 @@ private object KubernetesSparkRestServerArguments {
         case "--keystore-key-password-file" :: value :: tail =>
           args = tail
           resolvedArguments.copy(keyPasswordFile = Some(value))
+        case "--key-pem-file" :: value :: tail =>
+          args = tail
+          resolvedArguments.copy(keyPemFile = Some(value))
+        case "--cert-pem-file" :: value :: tail =>
+          args = tail
+          resolvedArguments.copy(certPemFile = Some(value))
         // TODO polish usage message
         case Nil => resolvedArguments
         case unknown => throw new IllegalStateException(s"Unknown argument(s) found: $unknown")
@@ -339,17 +347,38 @@ private[spark] object KubernetesSparkRestServer {
         " is not a file, or does not exist.")
     }
     val sslOptions = if (parsedArguments.useSsl) {
-      val keyStorePassword = parsedArguments
-        .keyStorePasswordFile
-        .map(new File(_))
-        .map(Files.toString(_, Charsets.UTF_8))
       val keyPassword = parsedArguments
         .keyPasswordFile
         .map(new File(_))
         .map(Files.toString(_, Charsets.UTF_8))
+      val keyStorePassword = parsedArguments
+        .keyStorePasswordFile
+        .map(new File(_))
+        .map(Files.toString(_, Charsets.UTF_8))
+      val resolvedKeyStore = (parsedArguments.keyStoreFile, parsedArguments.keyPemFile) match {
+        case (None, Some(keyPemFile)) =>
+          parsedArguments.certPemFile match {
+            case Some(certPemFile) =>
+              Some(PemsToKeyStoreConverter.convertPemsToTempKeyStoreFile(
+                new File(keyPemFile),
+                new File(certPemFile),
+                "provided-key",
+                keyStorePassword,
+                keyPassword,
+                parsedArguments.keyStoreType))
+            case None =>
+              throw new SparkException("When providing pem files, both the key" +
+                " and the certificate must be specified.")
+          }
+        case (Some(_), None) => parsedArguments.keyStoreFile.map(new File(_))
+        case (None, None) => None
+        case (Some(_), Some(_)) =>
+          throw new SparkException("Cannot provide both a key pem file and a keyStore" +
+            " file; select one or the other for configuring SSL.")
+      }
       new SSLOptions(
         enabled = true,
-        keyStore = parsedArguments.keyStoreFile.map(new File(_)),
+        keyStore = resolvedKeyStore,
         keyStoreType = parsedArguments.keyStoreType,
         keyStorePassword = keyStorePassword,
         keyPassword = keyPassword)
