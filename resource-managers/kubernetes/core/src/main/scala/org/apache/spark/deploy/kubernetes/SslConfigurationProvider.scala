@@ -253,6 +253,7 @@ private[spark] class SslConfigurationProvider(
       case (Some(_), Some(_)) =>
         throw new SparkException("Cannot specify server PEM files and key store files; must" +
           " specify only one or the other.")
+      case _ =>
     }
     (maybeKeyPem, maybeServerCertPem) match {
       case (Some(_), None) =>
@@ -261,16 +262,18 @@ private[spark] class SslConfigurationProvider(
       case (None, Some(_)) =>
         throw new SparkException("When specifying the server certificate PEM file, the key PEM" +
           " file must also be provided.")
+      case _ =>
     }
     (maybeTrustStore, maybeClientCertPem) match {
       case (Some(_), Some(_)) =>
         throw new SparkException("Cannot specify client certificate PEM file and trust store" +
           " file; must specify only one or the other.")
+      case _ =>
     }
   }
 
   private def isValidSslFileScheme(rawUri: String): Boolean = {
-    val resolvedScheme = Option.apply(Utils.resolveURI(rawUri)).getOrElse("file")
+    val resolvedScheme = Option.apply(Utils.resolveURI(rawUri).getScheme).getOrElse("file")
     resolvedScheme == "file" || resolvedScheme == "local"
   }
 

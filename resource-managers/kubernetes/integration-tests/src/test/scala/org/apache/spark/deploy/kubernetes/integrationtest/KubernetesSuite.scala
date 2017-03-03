@@ -327,13 +327,10 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--conf", "spark.ssl.kubernetes.submit.enabled=true",
       "--conf", s"${DRIVER_SUBMIT_SSL_KEY_PEM.key}=" +
         s"file://${keyPem.getAbsolutePath}",
-      "--conf", "spark.ssl.kubernetes.submit.keyStorePassword=changeit",
-      "--conf", "spark.ssl.kubernetes.submit.keyPassword=changeit",
       "--conf", s"${DRIVER_SUBMIT_SSL_SERVER_CERT_PEM.key}=" +
         s"file://${certPem.getAbsolutePath}",
       "--conf", s"${DRIVER_SUBMIT_SSL_CLIENT_CERT_PEM.key}=" +
         s"file://${certPem.getAbsolutePath}",
-      "--conf", s"spark.ssl.kubernetes.driverlaunch.trustStorePassword=changeit",
       "--conf", "spark.kubernetes.submit.waitAppCompletion=false",
       EXAMPLES_JAR_FILE.getAbsolutePath)
     SparkSubmit.main(args)
