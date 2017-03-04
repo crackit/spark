@@ -152,9 +152,9 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
     // to false by default.
     val sparkConf = new SparkConf(true)
       .setMaster(s"k8s://https://${Minikube.getMinikubeIp}:8443")
-      .set("spark.kubernetes.submit.caCertFile", clientConfig.getCaCertFile)
-      .set("spark.kubernetes.submit.clientKeyFile", clientConfig.getClientKeyFile)
-      .set("spark.kubernetes.submit.clientCertFile", clientConfig.getClientCertFile)
+      .set("spark.kubernetes.apiserver.caCertFile", clientConfig.getCaCertFile)
+      .set("spark.kubernetes.apiserver.clientKeyFile", clientConfig.getClientKeyFile)
+      .set("spark.kubernetes.apiserver.clientCertFile", clientConfig.getClientCertFile)
       .set("spark.kubernetes.namespace", NAMESPACE)
       .set("spark.kubernetes.driver.docker.image", "spark-driver:latest")
       .set("spark.kubernetes.executor.docker.image", "spark-executor:latest")
@@ -190,9 +190,9 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--class", SPARK_PI_MAIN_CLASS,
       "--conf", "spark.ui.enabled=true",
       "--conf", "spark.testing=false",
-      "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
-      "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
-      "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
+      "--conf", s"spark.kubernetes.apiserver.caCertFile=${clientConfig.getCaCertFile}",
+      "--conf", s"spark.kubernetes.apiserver.clientKeyFile=${clientConfig.getClientKeyFile}",
+      "--conf", s"spark.kubernetes.apiserver.clientCertFile=${clientConfig.getClientCertFile}",
       "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
       "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
       "--conf", "spark.kubernetes.submit.waitAppCompletion=false",
@@ -213,9 +213,9 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--num-executors", "1",
       "--jars", s"local:///opt/spark/examples/integration-tests-jars/${HELPER_JAR_FILE.getName}",
       "--class", SPARK_PI_MAIN_CLASS,
-      "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
-      "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
-      "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
+      "--conf", s"spark.kubernetes.apiserver.caCertFile=${clientConfig.getCaCertFile}",
+      "--conf", s"spark.kubernetes.apiserver.clientKeyFile=${clientConfig.getClientKeyFile}",
+      "--conf", s"spark.kubernetes.apiserver.clientCertFile=${clientConfig.getClientCertFile}",
       "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
       "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
       "--conf", "spark.kubernetes.submit.waitAppCompletion=false",
@@ -236,9 +236,9 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--num-executors", "1",
       "--jars", HELPER_JAR_FILE.getAbsolutePath,
       "--class", SPARK_PI_MAIN_CLASS,
-      "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
-      "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
-      "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
+      "--conf", s"spark.kubernetes.apiserver.caCertFile=${clientConfig.getCaCertFile}",
+      "--conf", s"spark.kubernetes.apiserver.clientKeyFile=${clientConfig.getClientKeyFile}",
+      "--conf", s"spark.kubernetes.apiserver.clientCertFile=${clientConfig.getClientCertFile}",
       "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
       "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
       "--conf", "spark.kubernetes.driver.labels=label1=label1value,label2=label2value",
@@ -289,19 +289,19 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--num-executors", "1",
       "--jars", HELPER_JAR_FILE.getAbsolutePath,
       "--class", SPARK_PI_MAIN_CLASS,
-      "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
-      "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
-      "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
+      "--conf", s"spark.kubernetes.apiserver.caCertFile=${clientConfig.getCaCertFile}",
+      "--conf", s"spark.kubernetes.apiserver.clientKeyFile=${clientConfig.getClientKeyFile}",
+      "--conf", s"spark.kubernetes.apiserver.clientCertFile=${clientConfig.getClientCertFile}",
       "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
       "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
-      "--conf", "spark.ssl.kubernetes.submit.enabled=true",
-      "--conf", "spark.ssl.kubernetes.submit.keyStore=" +
+      "--conf", "spark.ssl.kubernetes.driversubmitserver.enabled=true",
+      "--conf", "spark.ssl.kubernetes.driversubmitserver.keyStore=" +
         s"file://${keyStore.getAbsolutePath}",
-      "--conf", "spark.ssl.kubernetes.submit.keyStorePassword=changeit",
-      "--conf", "spark.ssl.kubernetes.submit.keyPassword=changeit",
-      "--conf", "spark.ssl.kubernetes.submit.trustStore=" +
+      "--conf", "spark.ssl.kubernetes.driversubmitserver.keyStorePassword=changeit",
+      "--conf", "spark.ssl.kubernetes.driversubmitserver.keyPassword=changeit",
+      "--conf", "spark.ssl.kubernetes.driversubmitserver.trustStore=" +
         s"file://${trustStore.getAbsolutePath}",
-      "--conf", s"spark.ssl.kubernetes.driverlaunch.trustStorePassword=changeit",
+      "--conf", s"spark.ssl.kubernetes.driversubmitserver.trustStorePassword=changeit",
       "--conf", "spark.kubernetes.submit.waitAppCompletion=false",
       EXAMPLES_JAR_FILE.getAbsolutePath)
     SparkSubmit.main(args)
@@ -319,9 +319,9 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--num-executors", "1",
       "--jars", HELPER_JAR_FILE.getAbsolutePath,
       "--class", SPARK_PI_MAIN_CLASS,
-      "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
-      "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
-      "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
+      "--conf", s"spark.kubernetes.apiserver.caCertFile=${clientConfig.getCaCertFile}",
+      "--conf", s"spark.kubernetes.apiserver.clientKeyFile=${clientConfig.getClientKeyFile}",
+      "--conf", s"spark.kubernetes.apiserver.clientCertFile=${clientConfig.getClientCertFile}",
       "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
       "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
       "--conf", "spark.ssl.kubernetes.submit.enabled=true",
@@ -350,9 +350,9 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
       "--class", FILE_EXISTENCE_MAIN_CLASS,
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.testing=true",
-      "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
-      "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
-      "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
+      "--conf", s"spark.kubernetes.apiserver.caCertFile=${clientConfig.getCaCertFile}",
+      "--conf", s"spark.kubernetes.apiserver.clientKeyFile=${clientConfig.getClientKeyFile}",
+      "--conf", s"spark.kubernetes.apiserver.clientCertFile=${clientConfig.getClientCertFile}",
       "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
       "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
       "--conf", "spark.kubernetes.submit.waitAppCompletion=false",
@@ -423,9 +423,9 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
         "--class", SPARK_PI_MAIN_CLASS,
         "--conf", "spark.ui.enabled=true",
         "--conf", "spark.testing=false",
-        "--conf", s"spark.kubernetes.submit.caCertFile=${clientConfig.getCaCertFile}",
-        "--conf", s"spark.kubernetes.submit.clientKeyFile=${clientConfig.getClientKeyFile}",
-        "--conf", s"spark.kubernetes.submit.clientCertFile=${clientConfig.getClientCertFile}",
+        "--conf", s"spark.kubernetes.apiserver.caCertFile=${clientConfig.getCaCertFile}",
+        "--conf", s"spark.kubernetes.apiserver.clientKeyFile=${clientConfig.getClientKeyFile}",
+        "--conf", s"spark.kubernetes.apiserver.clientCertFile=${clientConfig.getClientCertFile}",
         "--conf", "spark.kubernetes.executor.docker.image=spark-executor:latest",
         "--conf", "spark.kubernetes.driver.docker.image=spark-driver:latest",
         "--conf", "spark.kubernetes.submit.waitAppCompletion=false",

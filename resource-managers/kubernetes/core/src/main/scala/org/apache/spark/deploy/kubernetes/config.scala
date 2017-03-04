@@ -54,8 +54,8 @@ package object config {
       .stringConf
       .createWithDefault(s"spark-executor:$sparkVersion")
 
-  private[spark] val KUBERNETES_CA_CERT_FILE =
-    ConfigBuilder("spark.kubernetes.submit.caCertFile")
+  private[spark] val KUBERNETES_APISERVER_CA_CERT_FILE =
+    ConfigBuilder("spark.kubernetes.apiserver.caCertFile")
       .doc("""
           | CA cert file for connecting to Kubernetes over SSL. This
           | file should be located on the submitting machine's disk.
@@ -63,8 +63,8 @@ package object config {
       .stringConf
       .createOptional
 
-  private[spark] val KUBERNETES_CLIENT_KEY_FILE =
-    ConfigBuilder("spark.kubernetes.submit.clientKeyFile")
+  private[spark] val KUBERNETES_CLIENT_APISERVER_KEY_FILE =
+    ConfigBuilder("spark.kubernetes.apiserver.clientKeyFile")
       .doc("""
           | Client key file for authenticating against the Kubernetes
           | API server. This file should be located on the submitting
@@ -73,8 +73,8 @@ package object config {
       .stringConf
       .createOptional
 
-  private[spark] val KUBERNETES_CLIENT_CERT_FILE =
-    ConfigBuilder("spark.kubernetes.submit.clientCertFile")
+  private[spark] val KUBERNETES_CLIENT_APISERVER_CERT_FILE =
+    ConfigBuilder("spark.kubernetes.apiserver.clientCertFile")
       .doc("""
           | Client cert file for authenticating against the
           | Kubernetes API server. This file should be located on
@@ -152,7 +152,7 @@ package object config {
       .createWithDefault(60L)
 
   private[spark] val DRIVER_SUBMIT_SSL_KEYSTORE =
-    ConfigBuilder("spark.ssl.kubernetes.submit.keyStore")
+    ConfigBuilder("spark.ssl.kubernetes.driversubmitserver.keyStore")
       .doc("""
           | KeyStore file for the driver submission server listening
           | on SSL. Can be pre-mounted on the driver container
@@ -162,7 +162,7 @@ package object config {
       .createOptional
 
   private[spark] val DRIVER_SUBMIT_SSL_TRUSTSTORE =
-    ConfigBuilder("spark.ssl.kubernetes.submit.trustStore")
+    ConfigBuilder("spark.ssl.kubernetes.driversubmitserver.trustStore")
       .doc("""
           | TrustStore containing certificates for communicating
           | to the driver submission server over SSL.
@@ -171,7 +171,7 @@ package object config {
       .createOptional
 
   private[spark] val DRIVER_SUBMIT_SSL_ENABLED =
-    ConfigBuilder("spark.ssl.kubernetes.submit.enabled")
+    ConfigBuilder("spark.ssl.kubernetes.driversubmitserver.enabled")
       .doc("""
              | Whether or not to use SSL when sending the
              | application dependencies to the driver pod.
@@ -181,7 +181,7 @@ package object config {
       .createWithDefault(false)
 
   private[spark] val DRIVER_SUBMIT_SSL_KEY_PEM =
-    ConfigBuilder("spark.ssl.kubernetes.submit.keyPemFile")
+    ConfigBuilder("spark.ssl.kubernetes.driversubmitserver.keyPem")
       .doc("""
           | Key pem file that the driver submission server will
           | use when setting up SSL connections. Can be pre-mounted
@@ -192,7 +192,7 @@ package object config {
       .createOptional
 
   private[spark] val DRIVER_SUBMIT_SSL_SERVER_CERT_PEM =
-    ConfigBuilder("spark.ssl.kubernetes.submit.serverCertPemFile")
+    ConfigBuilder("spark.ssl.kubernetes.driversubmitserver.serverCertPem")
       .doc("""
              | Certificate pem file that is associated with the key
              | pem file the submission server uses to set up
@@ -204,7 +204,7 @@ package object config {
       .createOptional
 
   private[spark] val DRIVER_SUBMIT_SSL_CLIENT_CERT_PEM =
-    ConfigBuilder("spark.ssl.kubernetes.submit.clientCertPemFile")
+    ConfigBuilder("spark.ssl.kubernetes.driversubmitserver.clientCertPem")
       .doc("""
              | Certificate pem file that the submission client uses
              | to connect to the submission server over SSL. This

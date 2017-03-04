@@ -68,15 +68,23 @@ Spark supports using SSL to encrypt the traffic in this bootstrapping process. I
 whenever possible. 
 
 See the [security page](security.html) and [configuration](configuration.html) sections for more information on
-configuring SSL; use the prefix `spark.ssl.kubernetes.submit` in configuring the SSL-related fields in the context
-of submitting to Kubernetes. For example, to set the trustStore used when the local machine communicates with the driver
-pod in starting the application, set `spark.ssl.kubernetes.submit.trustStore`.
+configuring SSL; use the prefix `spark.ssl.kubernetes.driversubmitserver` in configuring the SSL-related fields in the
+context of submitting to Kubernetes. For example, to set the trustStore used when the local machine communicates with
+the driver pod in starting the application, set `spark.ssl.kubernetes.driversubmitserver.trustStore`.
 
 One note about the keyStore is that it can be specified as either a file on the client machine or a file in the
-container image's disk. Thus `spark.ssl.kubernetes.submit.keyStore` can be a URI with a scheme of either `file:`
-or `local:`. A scheme of `file:` corresponds to the keyStore being located on the client machine; it is mounted onto
-the driver container as a [secret volume](https://kubernetes.io/docs/user-guide/secrets/). When the URI has the scheme
-`local:`, the file is assumed to already be on the container's disk at the appropriate path.
+container image's disk. Thus `spark.ssl.kubernetes.driversubmitserver.keyStore` can be a URI with a scheme of either
+`file:` or `local:`. A scheme of `file:` corresponds to the keyStore being located on the client machine; it is mounted
+onto the driver container as a [secret volume](https://kubernetes.io/docs/user-guide/secrets/). When the URI has the
+scheme `local:`, the file is assumed to already be on the container's disk at the appropriate path.
+
+Finally, the submission server and client can be configured to use PEM files instead of Java keyStores. When using
+this mode, set `spark.ssl.kubernetes.driversubmitserver.keyPem` and
+`spark.ssl.kubernetes.driversubmitserver.serverCertPem` to configure the key and certificate files on the driver
+submission server. These files can be uploaded from the submitter's machine if they have no scheme or a scheme of
+`file:`, or they can be located on the container's disk if they have the scheme `local:`. The client's certificate
+file should be provided via setting `spark.ssl.kubernetes.driversubmitserver.clientCertPem`, and this file must be
+located on the submitting machine's local disk.
 
 ### Kubernetes Clusters and the authenticated proxy endpoint
 
@@ -169,14 +177,14 @@ from the other deployment modes. See the [configuration page](configuration.html
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.submit.caCertFile</code></td>
+  <td><code>spark.kubernetes.apiserver.caCertFile</code></td>
   <td>(none)</td>
   <td>
     CA cert file for connecting to Kubernetes over SSL. This file should be located on the submitting machine's disk.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.submit.clientKeyFile</code></td>
+  <td><code>spark.kubernetes.apiserver.clientKeyFile</code></td>
   <td>(none)</td>
   <td>
     Client key file for authenticating against the Kubernetes API server. This file should be located on the submitting
@@ -184,7 +192,7 @@ from the other deployment modes. See the [configuration page](configuration.html
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.submit.clientCertFile</code></td>
+  <td><code>spark.kubernetes.apiserver.clientCertFile</code></td>
   <td>(none)</td>
   <td>
     Client cert file for authenticating against the Kubernetes API server. This file should be located on the submitting

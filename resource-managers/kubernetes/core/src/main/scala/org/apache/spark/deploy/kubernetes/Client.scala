@@ -122,13 +122,13 @@ private[spark] class Client(
       .withApiVersion("v1")
       .withMasterUrl(master)
       .withNamespace(namespace)
-    sparkConf.get(KUBERNETES_CA_CERT_FILE).foreach {
+    sparkConf.get(KUBERNETES_APISERVER_CA_CERT_FILE).foreach {
       f => k8ConfBuilder = k8ConfBuilder.withCaCertFile(f)
     }
-    sparkConf.get(KUBERNETES_CLIENT_KEY_FILE).foreach {
+    sparkConf.get(KUBERNETES_CLIENT_APISERVER_KEY_FILE).foreach {
       f => k8ConfBuilder = k8ConfBuilder.withClientKeyFile(f)
     }
-    sparkConf.get(KUBERNETES_CLIENT_CERT_FILE).foreach {
+    sparkConf.get(KUBERNETES_CLIENT_APISERVER_CERT_FILE).foreach {
       f => k8ConfBuilder = k8ConfBuilder.withClientCertFile(f)
     }
 
